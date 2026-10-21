@@ -1,0 +1,435 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>SOS Motor Riders - Monitoring & Admin Dashboard</title>
+  
+  <link rel="manifest" href="manifest.json">
+  <meta name="theme-color" content="#0f172a">
+  
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+
+  <style>
+    #map { height: 420px; width: 100%; border-radius: 0.75rem; }
+  </style>
+</head>
+<body class="bg-slate-900 text-slate-100 font-sans min-h-screen">
+
+  <header class="bg-slate-800 border-b border-slate-700 sticky top-0 z-50">
+    <div class="max-w-7xl mx-auto px-4 py-3 flex justify-between items-center">
+      <div class="flex items-center space-x-3">
+        <div class="bg-red-600 p-2 rounded-lg animate-pulse">
+          <i class="fa-solid fa-triangle-exclamation text-xl text-white"></i>
+        </div>
+        <div>
+          <h1 class="text-lg font-bold text-white tracking-wide">SOS MOTOR RIDERS</h1>
+          <p class="text-xs text-slate-400">PWA Monitoring &amp; ESP32 Firmware Generator</p>
+        </div>
+      </div>
+      <div class="flex items-center space-x-2">
+        <button onclick="toggleModal(true)" class="bg-indigo-600 hover:bg-indigo-500 text-xs text-white px-3 py-2 rounded-lg transition flex items-center gap-1 font-semibold">
+          <i class="fa-solid fa-microchip"></i> ESP32 Config Generator
+        </button>
+        <button onclick="loadData()" class="bg-slate-700 hover:bg-slate-600 text-xs px-3 py-2 rounded-lg transition flex items-center gap-1">
+          <i class="fa-solid fa-rotate"></i> Refresh
+        </button>
+      </div>
+    </div>
+  </header>
+
+  <main class="max-w-7xl mx-auto px-4 py-6 space-y-6">
+
+    <div id="alertBanner" class="hidden bg-red-900/80 border border-red-500 text-red-200 p-4 rounded-xl flex justify-between items-center shadow-lg">
+      <div class="flex items-center gap-3">
+        <i class="fa-solid fa-bell-exclamation text-3xl animate-bounce text-red-400"></i>
+        <div>
+          <h3 class="font-bold text-base">PERINGATAN SOS AKTIF!</h3>
+          <p class="text-xs text-red-300" id="alertSubtitle">Pengendara membutuhkan bantuan segera.</p>
+        </div>
+      </div>
+      <span class="text-xs font-mono bg-red-950 px-3 py-1 rounded-full border border-red-700" id="alertTime">NOW</span>
+    </div>
+
+    <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+
+      <div class="lg:col-span-2 bg-slate-800 p-4 rounded-2xl border border-slate-700 flex flex-col space-y-3">
+        <div class="flex justify-between items-center">
+          <h2 class="font-semibold text-slate-200 flex items-center gap-2">
+            <i class="fa-solid fa-map-location-dot text-red-500"></i> Lokasi Peta Interaktif
+          </h2>
+          <span id="coordsDisplay" class="text-xs text-slate-400 font-mono">Lat: - | Lng: -</span>
+        </div>
+        <div id="map"></div>
+      </div>
+
+      <div class="space-y-6">
+
+        <div class="bg-slate-800 p-5 rounded-2xl border border-slate-700 space-y-4">
+          <h2 class="font-semibold text-slate-200 flex items-center gap-2 text-sm">
+            <i class="fa-solid fa-cloud-sun text-amber-400"></i> Informasi Lingkungan
+          </h2>
+          
+          <div class="grid grid-cols-2 gap-3">
+            <div class="bg-slate-900/60 p-3 rounded-xl border border-slate-700/50">
+              <span class="text-xs text-slate-400 block">Cuaca</span>
+              <span id="wCondition" class="text-sm font-bold text-slate-100">--</span>
+            </div>
+            <div class="bg-slate-900/60 p-3 rounded-xl border border-slate-700/50">
+              <span class="text-xs text-slate-400 block">Suhu</span>
+              <span id="wTemp" class="text-sm font-bold text-amber-400">--</span>
+            </div>
+            <div class="bg-slate-900/60 p-3 rounded-xl border border-slate-700/50">
+              <span class="text-xs text-slate-400 block">Kecepatan Angin</span>
+              <span id="wWind" class="text-sm font-bold text-cyan-400">--</span>
+            </div>
+            <div class="bg-slate-900/60 p-3 rounded-xl border border-slate-700/50">
+              <span class="text-xs text-slate-400 block">Lalu Lintas</span>
+              <span id="trafficInfo" class="text-sm font-bold text-emerald-400">Lancar</span>
+            </div>
+          </div>
+        </div>
+
+        <div class="bg-slate-800 p-5 rounded-2xl border border-slate-700 space-y-3">
+          <h2 class="font-semibold text-slate-200 flex items-center gap-2 text-sm">
+            <i class="fa-solid fa-reply text-emerald-400"></i> Kirim Respon ke Layar OLED
+          </h2>
+          
+          <p class="text-xs text-slate-400">Kirim pesan langsung ke layar OLED motor pengendara.</p>
+          
+          <div class="space-y-2">
+            <input type="hidden" id="selectedSosId">
+            <select id="presetMessage" class="w-full bg-slate-900 border border-slate-700 text-xs text-slate-200 rounded-xl p-2.5 outline-none" onchange="applyPreset()">
+              <option value="">-- Pilih Pesan Cepat --</option>
+              <option value="Bantuan Meluncur!">Bantuan Meluncur!</option>
+              <option value="Tetap Tenang, Kami Datang">Tetap Tenang, Kami Datang</option>
+              <option value="Ambulans Dikontak">Ambulans Dikontak</option>
+            </select>
+            
+            <input type="text" id="customMessage" placeholder="Atau ketik pesan khusus..." class="w-full bg-slate-900 border border-slate-700 text-xs text-slate-200 rounded-xl p-2.5 outline-none">
+            
+            <button onclick="submitResponse()" class="w-full bg-emerald-600 hover:bg-emerald-500 text-white font-semibold text-xs py-2.5 rounded-xl transition flex justify-center items-center gap-2">
+              <i class="fa-solid fa-paper-plane"></i> Kirim Respon Kedaruratan
+            </button>
+          </div>
+        </div>
+
+      </div>
+    </div>
+
+    <div class="bg-slate-800 p-5 rounded-2xl border border-slate-700 space-y-4">
+      <h2 class="font-semibold text-slate-200 flex items-center gap-2 text-sm">
+        <i class="fa-solid fa-clock-rotate-left text-slate-400"></i> Riwayat Laporan SOS
+      </h2>
+      <div class="overflow-x-auto">
+        <table class="w-full text-left text-xs text-slate-300">
+          <thead class="bg-slate-900/80 text-slate-400 uppercase font-mono">
+            <tr>
+              <th class="p-3">ID SOS</th>
+              <th class="p-3">Waktu</th>
+              <th class="p-3">Device ID</th>
+              <th class="p-3">Status</th>
+              <th class="p-3">Respon Keluarga</th>
+              <th class="p-3">Aksi</th>
+            </tr>
+          </thead>
+          <tbody id="sosLogTable" class="divide-y divide-slate-700/50">
+            <tr>
+              <td colspan="6" class="text-center p-4 text-slate-500">Memuat data log...</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+  </main>
+
+  <div id="firmwareModal" class="fixed inset-0 bg-slate-950/80 backdrop-blur-sm z-50 hidden flex justify-center items-center p-4 overflow-y-auto">
+    <div class="bg-slate-800 border border-slate-700 rounded-2xl max-w-3xl w-full p-6 space-y-4 max-h-[90vh] flex flex-col">
+      <div class="flex justify-between items-center border-b border-slate-700 pb-3">
+        <h3 class="text-base font-bold text-white flex items-center gap-2">
+          <i class="fa-solid fa-code text-indigo-400"></i> ESP32 Firmware Generator (C++)
+        </h3>
+        <button onclick="toggleModal(false)" class="text-slate-400 hover:text-white"><i class="fa-solid fa-xmark text-lg"></i></button>
+      </div>
+
+      <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
+        <div>
+          <label class="text-xs text-slate-400 block mb-1">URL Deploy Google Apps Script (GAS)</label>
+          <input type="text" id="cfgGasUrl" placeholder="https://script.google.com/macros/s/.../exec" class="w-full bg-slate-900 border border-slate-700 text-xs p-2.5 rounded-xl text-slate-200 outline-none">
+        </div>
+        <div>
+          <label class="text-xs text-slate-400 block mb-1">Wi-Fi SSID (Nama Wi-Fi)</label>
+          <input type="text" id="cfgSsid" placeholder="Nama WiFi Anda" class="w-full bg-slate-900 border border-slate-700 text-xs p-2.5 rounded-xl text-slate-200 outline-none">
+        </div>
+        <div>
+          <label class="text-xs text-slate-400 block mb-1">Wi-Fi Password</label>
+          <input type="password" id="cfgPassword" placeholder="Password WiFi" class="w-full bg-slate-900 border border-slate-700 text-xs p-2.5 rounded-xl text-slate-200 outline-none">
+        </div>
+        <div>
+          <label class="text-xs text-slate-400 block mb-1">Device ID ESP32</label>
+          <input type="text" id="cfgDeviceId" value="ESP32_RIDER_01" class="w-full bg-slate-900 border border-slate-700 text-xs p-2.5 rounded-xl text-slate-200 outline-none">
+        </div>
+      </div>
+
+      <button onclick="generateCppCode()" class="w-full bg-indigo-600 hover:bg-indigo-500 text-white font-semibold text-xs py-2.5 rounded-xl transition">
+        Generate Kode C++ Firmware
+      </button>
+
+      <div class="flex-grow flex flex-col space-y-2 overflow-hidden">
+        <div class="flex justify-between items-center">
+          <span class="text-xs text-slate-400 font-mono">Output: esp32_sos_firmware.ino</span>
+          <button onclick="copyCppCode()" class="text-xs text-indigo-400 hover:text-indigo-300 font-semibold flex items-center gap-1">
+            <i class="fa-solid fa-copy"></i> Salin Kode
+          </button>
+        </div>
+        <textarea id="cppCodeOutput" readonly class="w-full h-48 bg-slate-950 font-mono text-[11px] text-emerald-400 p-3 rounded-xl border border-slate-700/60 overflow-y-auto outline-none resize-none" placeholder="Klik tombol Generate untuk menghasilkan kode C++..."></textarea>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    let map, marker;
+    let gasUrlGlobal = localStorage.getItem('gas_url') || '';
+
+    if ('serviceWorker' in navigator) {
+      window.addEventListener('load', () => {
+        navigator.serviceWorker.register('sw.js').catch(err => console.log('SW reg error:', err));
+      });
+    }
+
+    document.addEventListener("DOMContentLoaded", () => {
+      initMap();
+      if(gasUrlGlobal) document.getElementById('cfgGasUrl').value = gasUrlGlobal;
+      loadData();
+      setInterval(loadData, 10000);
+    });
+
+    function initMap() {
+      map = L.map('map').setView([-0.5021, 117.1536], 13);
+      L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+        maxZoom: 19, attribution: '© OpenStreetMap'
+      }).addTo(map);
+
+      marker = L.marker([-0.5021, 117.1536]).addTo(map)
+        .bindPopup('Menunggu sinyal darurat...').openPopup();
+    }
+
+    function toggleModal(show) {
+      document.getElementById('firmwareModal').classList.toggle('hidden', !show);
+    }
+
+    async function loadData() {
+      gasUrlGlobal = document.getElementById('cfgGasUrl').value.trim() || gasUrlGlobal;
+      if (!gasUrlGlobal) return;
+
+      try {
+        const response = await fetch(`${gasUrlGlobal}?action=get_logs`);
+        const json = await response.json();
+        if (json.status === "success") {
+          renderData(json.data);
+        }
+      } catch (err) {
+        console.error("Error loading logs:", err);
+      }
+    }
+
+    function renderData(logs) {
+      const tbody = document.getElementById('sosLogTable');
+      tbody.innerHTML = '';
+
+      if (!logs || logs.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="6" class="text-center p-4 text-slate-500">Belum ada riwayat darurat.</td></tr>';
+        return;
+      }
+
+      const latest = logs[0];
+      
+      if (latest.Status_Selesai === "AKTIF") {
+        document.getElementById('alertBanner').classList.remove('hidden');
+        document.getElementById('alertSubtitle').innerText = `Motor ${latest.Device_ID} menekan tombol SOS!`;
+        document.getElementById('alertTime').innerText = new Date(latest.Timestamp).toLocaleTimeString();
+      } else {
+        document.getElementById('alertBanner').classList.add('hidden');
+      }
+
+      if (latest.Latitude && latest.Longitude) {
+        const lat = parseFloat(latest.Latitude);
+        const lng = parseFloat(latest.Longitude);
+        map.setView([lat, lng], 15);
+        marker.setLatLng([lat, lng])
+          .bindPopup(`<b>SOS AKTIF!</b><br>Device: ${latest.Device_ID}<br>Waktu: ${new Date(latest.Timestamp).toLocaleString()}`)
+          .openPopup();
+        document.getElementById('coordsDisplay').innerText = `Lat: ${lat.toFixed(4)} | Lng: ${lng.toFixed(4)}`;
+      }
+
+      document.getElementById('wCondition').innerText = latest.Kondisi_Cuaca || 'N/A';
+      document.getElementById('wTemp').innerText = latest.Suhu || 'N/A';
+      document.getElementById('wWind').innerText = latest.Kecepatan_Angin || 'N/A';
+      document.getElementById('selectedSosId').value = latest.ID;
+
+      logs.forEach(log => {
+        const row = document.createElement('tr');
+        row.className = "hover:bg-slate-700/30 transition";
+        row.innerHTML = `
+          <td class="p-3 font-mono font-bold text-slate-200">${log.ID}</td>
+          <td class="p-3">${new Date(log.Timestamp).toLocaleString()}</td>
+          <td class="p-3">${log.Device_ID}</td>
+          <td class="p-3">
+            <span class="px-2 py-0.5 rounded-full text-[10px] font-semibold ${log.Status_Selesai === 'AKTIF' ? 'bg-red-900/60 text-red-300 border border-red-700' : 'bg-emerald-900/60 text-emerald-300 border border-emerald-700'}">
+              ${log.Status_Selesai}
+            </span>
+          </td>
+          <td class="p-3 font-semibold text-emerald-400">${log.Respon_Keluarga || '-'}</td>
+          <td class="p-3">
+            <button onclick="selectSOS('${log.ID}')" class="bg-slate-700 hover:bg-slate-600 text-slate-200 px-2 py-1 rounded text-[10px]">Pilih</button>
+          </td>
+        `;
+        tbody.appendChild(row);
+      });
+    }
+
+    function applyPreset() {
+      const preset = document.getElementById('presetMessage').value;
+      if (preset) document.getElementById('customMessage').value = preset;
+    }
+
+    function selectSOS(id) {
+      document.getElementById('selectedSosId').value = id;
+      alert(`SOS ID ${id} dipilih.`);
+    }
+
+    async function submitResponse() {
+      const sosId = document.getElementById('selectedSosId').value;
+      const msg = document.getElementById('customMessage').value;
+      gasUrlGlobal = document.getElementById('cfgGasUrl').value.trim() || gasUrlGlobal;
+
+      if (!gasUrlGlobal) return alert("Masukkan URL GAS di Config terlebih dahulu!");
+      if (!sosId || !msg) return alert("Pilih SOS ID dan isi pesan respon!");
+
+      try {
+        const response = await fetch(gasUrlGlobal, {
+          method: 'POST',
+          body: JSON.stringify({ action: 'respond_sos', sos_id: sosId, response_message: msg })
+        });
+        const res = await response.json();
+        alert(res.message);
+        document.getElementById('customMessage').value = '';
+        loadData();
+      } catch(e) {
+        alert("Gagal mengirim respon: " + e.toString());
+      }
+    }
+
+    function generateCppCode() {
+      const url = document.getElementById('cfgGasUrl').value.trim();
+      const ssid = document.getElementById('cfgSsid').value.trim();
+      const pwd = document.getElementById('cfgPassword').value.trim();
+      const devId = document.getElementById('cfgDeviceId').value.trim() || 'ESP32_RIDER_01';
+
+      if(!url || !ssid) return alert("URL GAS dan SSID Wi-Fi wajib diisi!");
+      localStorage.setItem('gas_url', url);
+
+      const code = `#include <WiFi.h>
+#include <HTTPClient.h>
+#include <Wire.h>
+#include <Adafruit_GFX.h>
+#include <Adafruit_SSD1306.h>
+
+const char* WIFI_SSID = "${ssid}";
+const char* WIFI_PASSWORD = "${pwd}";
+String GAS_URL = "${url}";
+String deviceID = "${devId}";
+
+#define BUTTON_SOS_PIN 15
+#define SCREEN_WIDTH 128
+#define SCREEN_HEIGHT 64
+Adafruit_SSD1306 display(SCREEN_WIDTH, SCREEN_HEIGHT, &Wire, -1);
+
+float currentLat = -0.5021; 
+float currentLng = 117.1536;
+unsigned long lastPollTime = 0;
+
+void setup() {
+  Serial.begin(115200);
+  pinMode(BUTTON_SOS_PIN, INPUT_PULLUP);
+
+  if(!display.begin(SSD1306_SWITCHCAPVCC, 0x3C)) {
+    for(;;);
+  }
+  displayOLED("SOS SYSTEM", "Connecting WiFi...", "");
+
+  WiFi.begin(WIFI_SSID, WIFI_PASSWORD);
+  while (WiFi.status() != WL_CONNECTED) { delay(500); }
+  displayOLED("SOS SYSTEM", "READY / STANDBY", "Tekan Tombol SOS");
+}
+
+void loop() {
+  if (digitalRead(BUTTON_SOS_PIN) == LOW) {
+    delay(200);
+    if (digitalRead(BUTTON_SOS_PIN) == LOW) {
+      displayOLED("SENDING SOS!", "Mengirim Sinyal...", "Tunggu Respon...");
+      triggerSOS();
+      delay(2000);
+    }
+  }
+  if (millis() - lastPollTime > 5000) {
+    lastPollTime = millis();
+    checkFamilyResponse();
+  }
+}
+
+void triggerSOS() {
+  if (WiFi.status() == WL_CONNECTED) {
+    HTTPClient http;
+    http.begin(GAS_URL);
+    http.addHeader("Content-Type", "application/json");
+    String payload = "{\\"action\\":\\"trigger_sos\\",\\"device_id\\":\\"" + deviceID + "\\",\\"latitude\\":" + String(currentLat, 6) + ",\\"longitude\\":" + String(currentLng, 6) + ",\\"status_darurat\\":\\"TOMBOL SOS DITEKAN\\"}";
+    http.POST(payload);
+    http.end();
+  }
+}
+
+void checkFamilyResponse() {
+  if (WiFi.status() == WL_CONNECTED) {
+    HTTPClient http;
+    http.begin(GAS_URL + "?action=get_oled_msg&device_id=" + deviceID);
+    if (http.GET() == 200) {
+      String payload = http.getString();
+      int msgIndex = payload.indexOf("\\"oled_message\\":\\"");
+      if (msgIndex != -1) {
+        int start = msgIndex + 16;
+        int end = payload.indexOf("\\"", start);
+        String msg = payload.substring(start, end);
+        if (msg != "STANDBY / AMAN") displayOLED("RESPON KELUARGA:", msg, "Hati-hati!");
+      }
+    }
+    http.end();
+  }
+}
+
+void displayOLED(String h, String l1, String l2) {
+  display.clearDisplay();
+  display.setTextSize(1);
+  display.setTextColor(SSD1306_WHITE);
+  display.setCursor(0, 0); display.println("== " + h + " ==");
+  display.setCursor(0, 20); display.println(l1);
+  display.setCursor(0, 40); display.println(l2);
+  display.display();
+}`;
+
+      document.getElementById('cppCodeOutput').value = code;
+    }
+
+    function copyCppCode() {
+      const copyText = document.getElementById('cppCodeOutput');
+      copyText.select();
+      document.execCommand("copy");
+      alert("Kode C++ berhasil disalin ke clipboard!");
+    }
+  </script>
+</body>
+</html>
