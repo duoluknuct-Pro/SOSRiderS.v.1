@@ -172,7 +172,7 @@
       <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
         <div>
           <label class="text-xs text-slate-400 block mb-1">URL Deploy Google Apps Script (GAS)</label>
-          <input type="text" id="cfgGasUrl" placeholder="https://script.google.com/macros/s/AKfycbyjC8YtVy6W5Oq0ss96DFohqmQU38sdIojKJ4VMpBpJXNkeIJ0cchdonOgj4bDrH7cn/exec" class="w-full bg-slate-900 border border-slate-700 text-xs p-2.5 rounded-xl text-slate-200 outline-none">
+          <input type="text" id="cfgGasUrl" placeholder="https://script.google.com/macros/s/.../exec" class="w-full bg-slate-900 border border-slate-700 text-xs p-2.5 rounded-xl text-slate-200 outline-none">
         </div>
         <div>
           <label class="text-xs text-slate-400 block mb-1">Wi-Fi SSID (Nama Wi-Fi)</label>
@@ -249,7 +249,7 @@
 
       poiLayerGroup.clearLayers();
 
-      const radius = 3000; // Radius 3km
+      const radius = 3000;
       const overpassQuery = `
         [out:json];
         (
@@ -309,7 +309,7 @@
           count++;
         });
 
-        statusEl.innerText = `Menampilkan ${count} POI terdekat (SPBU, Bengkel, RM, Minimarket).`;
+        statusEl.innerText = `Menampilkan ${count} POI terdekat.`;
       } catch (err) {
         console.error("Gagal memuat POI:", err);
         statusEl.innerText = "Gagal memuat POI terdekat.";
@@ -439,6 +439,7 @@
 #include <Wire.h>
 #include <Adafruit_GFX.h>
 #include <Adafruit_SSD1306.h>
+#include <ArduinoJson.h>
 
 const char* WIFI_SSID = "${ssid}";
 const char* WIFI_PASSWORD = "${pwd}";
@@ -488,7 +489,7 @@ void triggerSOS() {
     HTTPClient http;
     http.begin(GAS_URL);
     http.addHeader("Content-Type", "application/json");
-    String payload = "{\\"action\\":\\"trigger_sos\\",\\"device_id\\":\\"" + deviceID + "\\",\\"latitude\\":" + String(currentLat, 6) + ",\\"longitude\\":" + String(currentLng, 6) + ",\\"status_darurat\\":\\"TOMBOL SOS DITEKAN\\"}";
+    String payload = "{\\"action\\":\\"trigger_sos\\",\\"device_id\\":\\"" + deviceID + "\\",\\"latitude\\": " + String(currentLat, 6) + ",\\"longitude\\": " + String(currentLng, 6) + ",\\"status_darurat\\":\\"TOMBOL SOS DITEKAN\\"}";
     http.POST(payload);
     http.end();
   }
@@ -498,14 +499,23 @@ void checkFamilyResponse() {
   if (WiFi.status() == WL_CONNECTED) {
     HTTPClient http;
     http.begin(GAS_URL + "?action=get_oled_msg&device_id=" + deviceID);
-    if (http.GET() == 200) {
+    
+    int httpResponseCode = http.GET();
+    if (httpResponseCode > 0) {
       String payload = http.getString();
-      int msgIndex = payload.indexOf("\\"oled_message\\":\\"");
-      if (msgIndex != -1) {
-        int start = msgIndex + 16;
-        int end = payload.indexOf("\\"", start);
-        String msg = payload.substring(start, end);
-        if (msg != "STANDBY / AMAN") displayOLED("RESPON KELUARGA:", msg, "Hati-hati!");
+      
+      // Parsing JSON aman menggunakan ArduinoJson
+      StaticJsonDocument<512> doc;
+      DeserializationError error = deserializeJson(doc, payload);
+
+      if (!error) {
+        const char* msg = doc["oled_message"];
+        if (msg != nullptr && String(msg) != "" && String(msg) != "STANDBY / AMAN") {
+          displayOLED("RESPON PESAN:", String(msg), "Hati-hati!");
+          Serial.println("Pesan OLED diterima: " + String(msg));
+        }
+      } else {
+        Serial.println("Gagal parsing JSON!");
       }
     }
     http.end();
