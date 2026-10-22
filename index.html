@@ -127,6 +127,11 @@
             <button onclick="submitResponse()" class="w-full bg-emerald-600 hover:bg-emerald-500 text-white font-semibold text-xs py-2.5 rounded-xl transition flex justify-center items-center gap-2">
               <i class="fa-solid fa-paper-plane"></i> Kirim Respon Kedaruratan
             </button>
+
+            <!-- TOMBOL RESET KE STANDBY -->
+            <button onclick="resetToStandby()" class="w-full bg-amber-600 hover:bg-amber-500 text-white font-semibold text-xs py-2.5 rounded-xl transition flex justify-center items-center gap-2">
+              <i class="fa-solid fa-rotate-left"></i> Reset OLED ke Standby
+            </button>
           </div>
         </div>
 
@@ -172,7 +177,7 @@
       <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
         <div>
           <label class="text-xs text-slate-400 block mb-1">URL Deploy Google Apps Script (GAS)</label>
-          <input type="text" id="cfgGasUrl" placeholder="https://script.google.com/macros/s/.../exec" class="w-full bg-slate-900 border border-slate-700 text-xs p-2.5 rounded-xl text-slate-200 outline-none">
+          <input type="text" id="cfgGasUrl" placeholder="https://script.google.com/macros/s/AKfycbyjC8YtVy6W5Oq0ss96DFohqmQU38sdIojKJ4VMpBpJXNkeIJ0cchdonOgj4bDrH7cn/exec" class="w-full bg-slate-900 border border-slate-700 text-xs p-2.5 rounded-xl text-slate-200 outline-none">
         </div>
         <div>
           <label class="text-xs text-slate-400 block mb-1">Wi-Fi SSID (Nama Wi-Fi)</label>
@@ -425,6 +430,25 @@
       }
     }
 
+    async function resetToStandby() {
+      const devId = document.getElementById('cfgDeviceId').value.trim() || 'ESP32_RIDER_01';
+      gasUrlGlobal = document.getElementById('cfgGasUrl').value.trim() || gasUrlGlobal;
+
+      if (!gasUrlGlobal) return alert("Masukkan URL GAS di Config terlebih dahulu!");
+
+      try {
+        const response = await fetch(gasUrlGlobal, {
+          method: 'POST',
+          body: JSON.stringify({ action: 'reset_standby', device_id: devId })
+        });
+        const res = await response.json();
+        alert(res.message);
+        loadData();
+      } catch(e) {
+        alert("Gagal mereset OLED: " + e.toString());
+      }
+    }
+
     function generateCppCode() {
       const url = document.getElementById('cfgGasUrl').value.trim();
       const ssid = document.getElementById('cfgSsid').value.trim();
@@ -498,8 +522,6 @@ void triggerSOS() {
 void checkFamilyResponse() {
   if (WiFi.status() == WL_CONNECTED) {
     HTTPClient http;
-    
-    // Aktifkan follow redirect agar ESP32 bisa membaca respon dari Google Apps Script
     http.setFollowRedirects(HTTPC_STRICT_FOLLOW_REDIRECTS);
     
     String url = GAS_URL + "?action=get_oled_msg&device_id=" + deviceID;
@@ -508,22 +530,27 @@ void checkFamilyResponse() {
     int httpCode = http.GET();
     if (httpCode > 0) {
       String payload = http.getString();
-      Serial.println("Payload dari GAS: " + payload);
 
       StaticJsonDocument<512> doc;
       DeserializationError error = deserializeJson(doc, payload);
 
       if (!error) {
         const char* msg = doc["oled_message"];
-        if (msg != nullptr && String(msg) != "" && String(msg) != "STANDBY / AMAN") {
-          displayOLED("RESPON KELUARGA:", String(msg), "Hati-hati!");
-          Serial.println("Pesan Berhasil Tampil: " + String(msg));
+        if (msg != nullptr) {
+          String messageStr = String(msg);
+          
+          if (messageStr == "STANDBY / AMAN") {
+            displayOLED("SOS SYSTEM", "READY / STANDBY", "Tekan Tombol SOS");
+            Serial.println("OLED dikembalikan ke Standby.");
+          } else {
+            displayOLED("RESPON KELUARGA:", messageStr, "Hati-hati!");
+            Serial.println("Pesan OLED diterima: " + messageStr);
+          }
         }
       } else {
         Serial.println("Gagal Parsing JSON dari GAS!");
       }
     } else {
-      // Perbaikan pada baris ini agar string tidak terpotong di tengah baris
       Serial.print("HTTP GET Gagal, Error Code: ");
       Serial.println(http.errorToString(httpCode));
     }
