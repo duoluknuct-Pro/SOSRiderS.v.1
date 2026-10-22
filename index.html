@@ -499,7 +499,7 @@ void checkFamilyResponse() {
   if (WiFi.status() == WL_CONNECTED) {
     HTTPClient http;
     
-    // PENTING: Aktifkan follow redirect agar ESP32 bisa membaca respon dari Google Apps Script!
+    // Aktifkan follow redirect agar ESP32 bisa membaca respon dari Google Apps Script
     http.setFollowRedirects(HTTPC_STRICT_FOLLOW_REDIRECTS);
     
     String url = GAS_URL + "?action=get_oled_msg&device_id=" + deviceID;
@@ -523,7 +523,9 @@ void checkFamilyResponse() {
         Serial.println("Gagal Parsing JSON dari GAS!");
       }
     } else {
-      Serial.printf("HTTP GET Gagal, Error Code: %s\n", http.errorToString(httpCode).c_str());
+      // Perbaikan pada baris ini agar string tidak terpotong di tengah baris
+      Serial.print("HTTP GET Gagal, Error Code: ");
+      Serial.println(http.errorToString(httpCode));
     }
     http.end();
   }
