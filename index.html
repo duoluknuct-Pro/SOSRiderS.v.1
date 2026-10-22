@@ -484,6 +484,7 @@ void setup() {
   pinMode(BUTTON_SOS_PIN, INPUT_PULLUP);
 
   if(!display.begin(SSD1306_SWITCHCAPVCC, 0x3C)) {
+    Serial.println(F("OLED SSD1306 Gagal Diinisialisasi"));
     for(;;);
   }
   displayOLED("SOS SYSTEM", "Connecting WiFi...", "");
@@ -511,6 +512,7 @@ void loop() {
 void triggerSOS() {
   if (WiFi.status() == WL_CONNECTED) {
     HTTPClient http;
+    http.setFollowRedirects(HTTPC_STRICT_FOLLOW_REDIRECTS);
     http.begin(GAS_URL);
     http.addHeader("Content-Type", "application/json");
     String payload = "{\\"action\\":\\"trigger_sos\\",\\"device_id\\":\\"" + deviceID + "\\",\\"latitude\\": " + String(currentLat, 6) + ",\\"longitude\\": " + String(currentLng, 6) + ",\\"status_darurat\\":\\"TOMBOL SOS DITEKAN\\"}";
